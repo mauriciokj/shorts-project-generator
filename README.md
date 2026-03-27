@@ -21,7 +21,8 @@ Prova de conceito validada com sucesso usando um template real.
 7. distribuir tempo proporcionalmente entre as imagens
 8. remover legenda herdada do template
 9. preservar efeitos/zoom dos clips principais
-10. gerar novo `.mepj`
+10. sincronizar metadata real das imagens (dimensões, codec e size)
+11. gerar novo `.mepj`
 
 ## Próximo passo
 Criar um CLI simples tipo:

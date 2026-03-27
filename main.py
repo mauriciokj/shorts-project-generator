@@ -8,6 +8,24 @@ from pathlib import Path
 import subprocess
 
 
+def probe_image(path: str) -> dict:
+    cmd = [
+        'ffprobe', '-v', 'error',
+        '-show_entries', 'stream=codec_name,width,height:format=size',
+        '-of', 'json',
+        path,
+    ]
+    out = subprocess.check_output(cmd, text=True)
+    obj = json.loads(out)
+    stream = obj['streams'][0]
+    return {
+        'codec': stream['codec_name'],
+        'width': int(stream['width']),
+        'height': int(stream['height']),
+        'size': int(obj['format']['size']),
+    }
+
+
 def get_mp3_duration_ms(path: str) -> int:
     cmd = [
         "ffprobe", "-v", "error",
@@ -136,9 +154,21 @@ def build_project(template, audio_path, images, output_path):
 
         for idx, c in enumerate(keep):
             dur = base + (rem if idx == len(images) - 1 else 0)
+            info = probe_image(str(images[idx]))
             c['clip']['enabled'] = True
             c['clip']['file']['path'] = str(images[idx])
-            c['clip']['file']['size'] = os.path.getsize(images[idx])
+            c['clip']['file']['size'] = info['size']
+            c['clip']['file']['format'] = 'jpeg' if info['codec'] in ('jpeg', 'mjpeg') else info['codec']
+            for vt in c['clip']['file'].get('videoTracks', []):
+                if 'Media::Video' in vt:
+                    vt['Media::Video']['width'] = info['width']
+                    vt['Media::Video']['height'] = info['height']
+                if 'Media::FileTrack' in vt:
+                    vt['Media::FileTrack']['bitrate'] = info['size']
+                    if info['codec'] == 'png':
+                        vt['Media::FileTrack']['codecId'] = 'CODEC_ID_PNG'
+                    elif info['codec'] in ('jpeg', 'mjpeg'):
+                        vt['Media::FileTrack']['codecId'] = 'CODEC_ID_MJPEG'
             c['timing']['timestamp'] = current
             c['timing']['duration'] = dur
             c['timing']['sourceDuration'] = 4000
