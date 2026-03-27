@@ -72,11 +72,31 @@ def build_project(template, audio_path, images, output_path):
                 image_clips.append(c)
 
         image_clips = sorted(image_clips, key=lambda c: c['timing']['timestamp'])
-        keep = image_clips[:len(images)]
 
-        for c in image_clips[len(images):]:
-            c['clip']['enabled'] = False
-            c['timing']['duration'] = 1
+        # Prefer clips that come from the original template image set instead of any stray
+        # manually inserted image from prior experiments.
+        preferred = []
+        for c in image_clips:
+            p = c.get('clip', {}).get('file', {}).get('path', '')
+            if 'cris-cyborg-wiba-images' in p:
+                preferred.append(c)
+
+        keep = (preferred[:len(images)] if len(preferred) >= len(images) else image_clips[:len(images)])
+        keep_ids = {id(c) for c in keep}
+
+        # Remove any foreign inherited image clip entirely instead of only disabling it,
+        # otherwise Movavi may still try to resolve the old file path on load.
+        filtered_clips = []
+        for c in clips:
+            clip = c.get('clip', {})
+            file = clip.get('file')
+            track = c.get('timing', {}).get('track', {}).get('@meta_reference')
+            if isinstance(file, dict) and file.get('format') in ('png', 'jpeg') and track == 5:
+                if id(c) not in keep_ids:
+                    continue
+            filtered_clips.append(c)
+        clips = filtered_clips
+        config['data']['content']['timeline']['clips'] = clips
 
         if audio_clip:
             f = audio_clip['clip']['file']
@@ -91,6 +111,24 @@ def build_project(template, audio_path, images, output_path):
         if music_clip:
             music_clip['timing']['timestamp'] = 0
             music_clip['timing']['duration'] = audio_ms
+
+        # Clean user collection so Movavi stops indexing inherited media from the template.
+        allowed_paths = {str(audio_path), *[str(p) for p in images]}
+        music_path = None
+        if music_clip and isinstance(music_clip.get('clip', {}).get('file'), dict):
+            music_path = music_clip['clip']['file'].get('path')
+            if music_path:
+                allowed_paths.add(music_path)
+
+        user_collection = config.get('data', {}).get('content', {}).get('userCollection', {})
+        items = user_collection.get('items')
+        if isinstance(items, list):
+            filtered_items = []
+            for item in items:
+                rp = item.get('resourcePath')
+                if not rp or rp in allowed_paths:
+                    filtered_items.append(item)
+            user_collection['items'] = filtered_items
 
         base = audio_ms // len(images)
         rem = audio_ms - base * len(images)
