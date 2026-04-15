@@ -59,7 +59,12 @@ def dump_json(path: Path, obj):
 def build_project(template, audio_path, images, output_path):
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
-        extract_project(template, td)
+        if template:
+            extract_project(template, td)
+        else:
+            base_dir = Path(__file__).resolve().parent / 'assets' / 'template-base'
+            (td / 'config.json').write_text((base_dir / 'config.json').read_text())
+            (td / 'meta.json').write_text((base_dir / 'meta.json').read_text())
         config = load_json(td / 'config.json')
         meta = load_json(td / 'meta.json') if (td / 'meta.json').exists() else {}
 
@@ -195,14 +200,14 @@ def build_project(template, audio_path, images, output_path):
 
 def main():
     parser = argparse.ArgumentParser(description='Generate Movavi .mepj shorts project from template + mp3 + images')
-    parser.add_argument('--template', required=True)
+    parser.add_argument('--template', required=False, default=None)
     parser.add_argument('--audio', required=True)
     parser.add_argument('--images', nargs='+', required=True)
     parser.add_argument('--output', required=True)
     args = parser.parse_args()
 
     build_project(
-        Path(args.template),
+        Path(args.template) if args.template else None,
         Path(args.audio),
         [Path(p) for p in args.images],
         Path(args.output),
